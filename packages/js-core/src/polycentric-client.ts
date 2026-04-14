@@ -168,12 +168,8 @@ export class PolycentricClient {
     );
     console.log('next seq', sequence.toString());
 
-    const vectorClocks = {
-      [COLLECTION.IDENTITY]: Proto.VectorClock.create({
-        sequence: [BigInt(1)],
-      }),
-      [COLLECTION.FEED]: Proto.VectorClock.create(),
-    };
+    // TODO: compute from head events via build_vector_clock
+    const vectorClocks: Proto.VectorClock[] = [];
 
     const event = Proto.Event.create({
       key: Proto.EventKey.create({
@@ -224,6 +220,36 @@ export class PolycentricClient {
   async commitEvent(signedEvent: Proto.SignedEvent): Promise<void> {
     await this.storage.events.save(signedEvent);
     this.events.emitContentCreated(signedEvent);
+  }
+
+  /**
+   * Build a vector clock
+   */
+  async buildVectorClock(event: Proto.Event): Promise<Proto.VectorClock[]> {
+    if (!this.core) throw new Error('Core not initialized');
+
+    const signerBytes = Proto.PublicKey.toBinary(event.key!.signedBy!);
+
+    // Filter out any events that are from the same collection AND signing key as our new event
+    const events = (
+      await this.storage.events.getHeadsByIdentity(event.key!.identity)
+    )
+      .map((signedEvent) => Proto.Event.fromBinary(signedEvent.eventBytes))
+      .filter(
+        (e) =>
+          !(
+            e.key?.collection === event.key?.collection &&
+            e.key?.signedBy?.key === event.key?.signedBy?.key
+          ),
+      )
+      .map((e) => Proto.Event.toBinary(e));
+
+    // Add our latest event to the heads array
+    events.push(Proto.Event.toBinary(event));
+
+    const vectorClockBytes = this.core.build_vector_clock(signerBytes, events);
+
+    return vectorClockBytes.map((bytes) => Proto.VectorClock.fromBinary(bytes));
   }
 
   /**
@@ -295,7 +321,7 @@ export class PolycentricClient {
     let newCount = 0;
 
     const results = await Promise.allSettled(
-      this.servers.map((server) => this.core!.list_events(server)),
+      this.servers.map((server) => this.core!.list_events(server, null)),
     );
 
     for (const result of results) {

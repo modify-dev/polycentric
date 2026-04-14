@@ -1,8 +1,8 @@
 use crate::platform::error::PlatformError;
 use js_sys::Uint8Array;
 use polycentric_common::models::protos_v2::{
-    event_sync_service_client::EventSyncServiceClient, Event, ListEventsRequest, PublicKey,
-    PutEventsRequest, SignedEvent,
+    event_sync_service_client::EventSyncServiceClient, Event, ListEventsFilters, ListEventsRequest,
+    PublicKey, PutEventsRequest, SignedEvent,
 };
 use polycentric_common::models::traits::Serializable;
 use prost::Message;
@@ -18,6 +18,12 @@ extern "C" {
 
     #[wasm_bindgen(typescript_type = "(signedEventBytes: Uint8Array) => Promise<void>")]
     pub type CommitEventCallback;
+
+    #[wasm_bindgen(typescript_type = "Uint8Array[]")]
+    pub type EventBytesArray;
+
+    #[wasm_bindgen(typescript_type = "Uint8Array[]")]
+    pub type VectorClockBytesArray;
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -137,39 +143,68 @@ impl PolycentricWasm {
         Ok(Uint8Array::from(&signed_event_bytes[..]))
     }
 
-    /// Fetch events from a server via gRPC-web.
+    /// Build vector clocks from head events (one per signer+collection).
     ///
-    /// # Arguments
-    /// * `server_url` - The base URL of the gRPC-web server (e.g. "http://localhost:50051")
-    /// * `limit` - Maximum number of events to fetch
-    /// * `identity` - Optional serialized Identity message bytes to filter by
-    /// * `stream_id` - Optional stream ID to filter by
-    /// * `signed_by` - Optional public key bytes to filter by
-    /// * `signed_by_key_type` - Key type for signed_by (required if signed_by is set)
-    ///
-    /// # Returns
-    /// * Serialized ListEventsResponse protobuf bytes
+    /// Thin WASM wrapper around `crate::event::vector_clock::build_vector_clocks`.
     #[wasm_bindgen]
+    pub fn build_vector_clock(
+        &self,
+        signed_by: &[u8],
+        head_events: EventBytesArray,
+    ) -> std::result::Result<VectorClockBytesArray, JsValue> {
+        use crate::event::vector_clock;
+
+        let array: &js_sys::Array = head_events.unchecked_ref();
+        let heads: Vec<vector_clock::HeadEntry> = array
+            .iter()
+            .map(|item| {
+                let bytes = Uint8Array::unchecked_from_js(item).to_vec();
+                vector_clock::decode_head(&bytes)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| JsValue::from_str(&e))?;
+
+        let clocks = vector_clock::build_vector_clocks(signed_by, &heads)
+            .map_err(|e| JsValue::from_str(&e))?;
+
+        let result = js_sys::Array::new();
+        for clock in clocks {
+            result.push(&Uint8Array::from(&clock.encode_to_vec()[..]));
+        }
+        Ok(result.unchecked_into())
+    }
+
+    /// Fetch events from a server via gRPC-web.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_events(
         &self,
         server_url: &str,
-        limit: Option<i32>,
+        size: Option<i32>,
         identity: Option<String>,
         collection: Option<i32>,
         signed_by: Option<Vec<u8>>,
         signed_by_key_type: Option<i32>,
+        sequence_gt: Option<i64>,
+        sequence_lt: Option<i64>,
     ) -> std::result::Result<Uint8Array, JsValue> {
         let mut client = Self::create_client(server_url);
 
+        let filters = ListEventsFilters {
+            collection,
+            identity,
+            signed_by: signed_by.map(|key| PublicKey {
+                key_type: signed_by_key_type.unwrap_or(1),
+                key,
+            }),
+            sequence_gt,
+            sequence_lt,
+        };
+
         let response = client
             .list_events(ListEventsRequest {
-                limit,
-                identity,
-                collection,
-                signed_by: signed_by.map(|key| PublicKey {
-                    key_type: signed_by_key_type.unwrap_or(1),
-                    key,
-                }),
+                filters: Some(filters),
+                size,
             })
             .await
             .map_err(|e| JsValue::from_str(&format!("gRPC list_events failed: {}", e)))?;
