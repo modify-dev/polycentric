@@ -6,32 +6,44 @@ import {
   Text,
 } from '@/src/common/components/primitives';
 import { Routes } from '@/src/common/constants';
-import type { ProfileScreenData } from '@/src/common/lib/polycentric-hooks';
-import { truncateName } from '@/src/common/lib/polycentric-hooks';
+import {
+  identiconUrl,
+  shortenIdentityId,
+  truncateName,
+  useUsername,
+} from '@/src/common/lib/polycentric-hooks';
 import { Atoms } from '@/src/common/theme';
 import { FeedChip } from '@/src/features/post/FeedChip';
+import { useProfile } from '@/src/features/profile/hooks/useProfile';
 import { router } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { View } from 'react-native';
+import { useProfileContext } from './ProfileContext';
+import FollowButton from '../follow/FollowButton';
 
 const BANNER_HEIGHT = 150;
 
 export interface ProfileHeaderProps {
-  data: ProfileScreenData;
   bannerColors: [string, string];
   onBack: () => void;
 }
 
-function ProfileHeaderInner({
-  data,
-  bannerColors,
-  onBack,
-}: ProfileHeaderProps) {
+function ProfileHeaderInner({ bannerColors, onBack }: ProfileHeaderProps) {
+  const { identityKey, isSelf, activeFeed, setActiveFeed } =
+    useProfileContext();
+
+  const fallbackUsername = useUsername(identityKey);
+  const profile = useProfile(identityKey);
+  const username = profile.name ?? fallbackUsername;
+
+  const short = identityKey ? shortenIdentityId(identityKey) : '...';
+  const avatarUrl = identityKey ? identiconUrl(identityKey) : '';
+
   const handleEdit = useCallback(() => {
-    if (data.identityKey) {
-      router.push(Routes.tabs.editProfile(data.identityKey));
-    }
-  }, [data.identityKey]);
+    if (identityKey) router.push(Routes.tabs.editProfile(identityKey));
+  }, [identityKey]);
+
+  if (profile.isLoading) return <></>;
 
   return (
     <>
@@ -70,10 +82,7 @@ function ProfileHeaderInner({
       </View>
 
       <View style={[Atoms.mx_lg, { marginTop: -40 }]}>
-        <Avatar
-          source={data.avatarUrl ? { uri: data.avatarUrl } : undefined}
-          size="xl"
-        />
+        <Avatar source={avatarUrl ? { uri: avatarUrl } : undefined} size="xl" />
       </View>
 
       <View
@@ -86,22 +95,22 @@ function ProfileHeaderInner({
       >
         <View style={[Atoms.mt_md, Atoms.gap_xs]}>
           <Text variant="title" fontWeight="bold">
-            {truncateName(data.username, 32)}
+            {truncateName(username, 32)}
           </Text>
           <Text variant="secondary" color="neutral_500">
-            {data.short}
+            {short}
           </Text>
-          {data.profile.description ? (
+          {profile.description ? (
             <View style={Atoms.mt_sm}>
               <Text variant="body" fontSize="sm" color="neutral_1000">
-                {data.profile.description}
+                {profile.description}
               </Text>
             </View>
           ) : null}
         </View>
 
         <View style={Atoms.mt_md}>
-          {data.isSelf ? (
+          {isSelf ? (
             <Button
               title="Edit profile"
               onPress={handleEdit}
@@ -109,33 +118,9 @@ function ProfileHeaderInner({
               size="sm"
             />
           ) : (
-            <Button
-              title={data.followStatus.isFollowing ? 'Following' : 'Follow'}
-              variant={data.followStatus.isFollowing ? 'secondary' : 'primary'}
-              size="sm"
-              onPress={data.followStatus.toggleFollow}
-            />
+            <FollowButton identity={identityKey!} />
           )}
         </View>
-      </View>
-
-      <View style={[Atoms.mx_lg, Atoms.mt_lg, Atoms.mb_md]}>
-        <HorizontalScrollGroup>
-          <FeedChip
-            type="posts"
-            title="Posts"
-            isSelected={data.activeFeed === 'posts'}
-            onPress={() => data.setActiveFeed('posts')}
-          />
-          {data.isSelf && (
-            <FeedChip
-              type="likes"
-              title="Likes"
-              isSelected={data.activeFeed === 'likes'}
-              onPress={() => data.setActiveFeed('likes')}
-            />
-          )}
-        </HorizontalScrollGroup>
       </View>
     </>
   );
