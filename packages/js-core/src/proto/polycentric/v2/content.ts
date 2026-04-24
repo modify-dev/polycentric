@@ -194,17 +194,17 @@ export interface ProfileUpdate {
      */
     name?: string;
     /**
-     * Reference to the Blob for the avatar
+     * Reference to the Blob for the avatar (support multiple different sizes)
      *
-     * @generated from protobuf field: optional polycentric.v2.Image avatar = 2
+     * @generated from protobuf field: optional polycentric.v2.ImageSet avatar = 2
      */
-    avatar?: Image;
+    avatar?: ImageSet;
     /**
-     * Reference to the Blob of a banner
+     * Reference to the Blob of a banner (support multiple different sizes)
      *
-     * @generated from protobuf field: optional polycentric.v2.Image banner = 3
+     * @generated from protobuf field: optional polycentric.v2.ImageSet banner = 3
      */
-    banner?: Image;
+    banner?: ImageSet;
     /**
      * Bio
      *
@@ -235,6 +235,8 @@ export interface Blob {
     size: bigint;
 }
 /**
+ * Single image with reference to the blob
+ *
  * @generated from protobuf message polycentric.v2.Image
  */
 export interface Image {
@@ -252,6 +254,20 @@ export interface Image {
     height: number;
 }
 /**
+ * Collection of different variants of an image
+ *
+ * @generated from protobuf message polycentric.v2.ImageSet
+ */
+export interface ImageSet {
+    /**
+     * @generated from protobuf field: repeated polycentric.v2.Image images = 1
+     */
+    images: Image[];
+}
+/**
+ * *
+ * gRPC requests
+ *
  * @generated from protobuf message polycentric.v2.SyncContentRequest
  */
 export interface SyncContentRequest {
@@ -272,6 +288,31 @@ export interface SyncContentRequest {
  * @generated from protobuf message polycentric.v2.SyncContentResponse
  */
 export interface SyncContentResponse {
+}
+/**
+ * *
+ * Request message for upoading a blob
+ *
+ * @generated from protobuf message polycentric.v2.UploadBlobRequest
+ */
+export interface UploadBlobRequest {
+    /**
+     * Reference message of the blob (mime type, content digest).
+     *
+     * @generated from protobuf field: polycentric.v2.Blob blob = 1
+     */
+    blob?: Blob;
+    /**
+     * Body (content) of the blob
+     *
+     * @generated from protobuf field: bytes body = 2
+     */
+    body: Uint8Array;
+}
+/**
+ * @generated from protobuf message polycentric.v2.UploadBlobResponse
+ */
+export interface UploadBlobResponse {
 }
 /**
  * @generated from protobuf enum polycentric.v2.ContentDigestType
@@ -832,8 +873,8 @@ class ProfileUpdate$Type extends MessageType<ProfileUpdate> {
     constructor() {
         super("polycentric.v2.ProfileUpdate", [
             { no: 1, name: "name", kind: "scalar", opt: true, T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "avatar", kind: "message", T: () => Image },
-            { no: 3, name: "banner", kind: "message", T: () => Image },
+            { no: 2, name: "avatar", kind: "message", T: () => ImageSet },
+            { no: 3, name: "banner", kind: "message", T: () => ImageSet },
             { no: 4, name: "description", kind: "scalar", opt: true, T: 9 /*ScalarType.STRING*/ }
         ]);
     }
@@ -851,11 +892,11 @@ class ProfileUpdate$Type extends MessageType<ProfileUpdate> {
                 case /* optional string name */ 1:
                     message.name = reader.string();
                     break;
-                case /* optional polycentric.v2.Image avatar */ 2:
-                    message.avatar = Image.internalBinaryRead(reader, reader.uint32(), options, message.avatar);
+                case /* optional polycentric.v2.ImageSet avatar */ 2:
+                    message.avatar = ImageSet.internalBinaryRead(reader, reader.uint32(), options, message.avatar);
                     break;
-                case /* optional polycentric.v2.Image banner */ 3:
-                    message.banner = Image.internalBinaryRead(reader, reader.uint32(), options, message.banner);
+                case /* optional polycentric.v2.ImageSet banner */ 3:
+                    message.banner = ImageSet.internalBinaryRead(reader, reader.uint32(), options, message.banner);
                     break;
                 case /* optional string description */ 4:
                     message.description = reader.string();
@@ -875,12 +916,12 @@ class ProfileUpdate$Type extends MessageType<ProfileUpdate> {
         /* optional string name = 1; */
         if (message.name !== undefined)
             writer.tag(1, WireType.LengthDelimited).string(message.name);
-        /* optional polycentric.v2.Image avatar = 2; */
+        /* optional polycentric.v2.ImageSet avatar = 2; */
         if (message.avatar)
-            Image.internalBinaryWrite(message.avatar, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
-        /* optional polycentric.v2.Image banner = 3; */
+            ImageSet.internalBinaryWrite(message.avatar, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        /* optional polycentric.v2.ImageSet banner = 3; */
         if (message.banner)
-            Image.internalBinaryWrite(message.banner, writer.tag(3, WireType.LengthDelimited).fork(), options).join();
+            ImageSet.internalBinaryWrite(message.banner, writer.tag(3, WireType.LengthDelimited).fork(), options).join();
         /* optional string description = 4; */
         if (message.description !== undefined)
             writer.tag(4, WireType.LengthDelimited).string(message.description);
@@ -1019,6 +1060,53 @@ class Image$Type extends MessageType<Image> {
  */
 export const Image = new Image$Type();
 // @generated message type with reflection information, may provide speed optimized methods
+class ImageSet$Type extends MessageType<ImageSet> {
+    constructor() {
+        super("polycentric.v2.ImageSet", [
+            { no: 1, name: "images", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => Image }
+        ]);
+    }
+    create(value?: PartialMessage<ImageSet>): ImageSet {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.images = [];
+        if (value !== undefined)
+            reflectionMergePartial<ImageSet>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ImageSet): ImageSet {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated polycentric.v2.Image images */ 1:
+                    message.images.push(Image.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ImageSet, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated polycentric.v2.Image images = 1; */
+        for (let i = 0; i < message.images.length; i++)
+            Image.internalBinaryWrite(message.images[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message polycentric.v2.ImageSet
+ */
+export const ImageSet = new ImageSet$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class SyncContentRequest$Type extends MessageType<SyncContentRequest> {
     constructor() {
         super("polycentric.v2.SyncContentRequest", [
@@ -1110,9 +1198,102 @@ class SyncContentResponse$Type extends MessageType<SyncContentResponse> {
  * @generated MessageType for protobuf message polycentric.v2.SyncContentResponse
  */
 export const SyncContentResponse = new SyncContentResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class UploadBlobRequest$Type extends MessageType<UploadBlobRequest> {
+    constructor() {
+        super("polycentric.v2.UploadBlobRequest", [
+            { no: 1, name: "blob", kind: "message", T: () => Blob },
+            { no: 2, name: "body", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<UploadBlobRequest>): UploadBlobRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.body = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<UploadBlobRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: UploadBlobRequest): UploadBlobRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* polycentric.v2.Blob blob */ 1:
+                    message.blob = Blob.internalBinaryRead(reader, reader.uint32(), options, message.blob);
+                    break;
+                case /* bytes body */ 2:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: UploadBlobRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* polycentric.v2.Blob blob = 1; */
+        if (message.blob)
+            Blob.internalBinaryWrite(message.blob, writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* bytes body = 2; */
+        if (message.body.length)
+            writer.tag(2, WireType.LengthDelimited).bytes(message.body);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message polycentric.v2.UploadBlobRequest
+ */
+export const UploadBlobRequest = new UploadBlobRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class UploadBlobResponse$Type extends MessageType<UploadBlobResponse> {
+    constructor() {
+        super("polycentric.v2.UploadBlobResponse", []);
+    }
+    create(value?: PartialMessage<UploadBlobResponse>): UploadBlobResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        if (value !== undefined)
+            reflectionMergePartial<UploadBlobResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: UploadBlobResponse): UploadBlobResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: UploadBlobResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message polycentric.v2.UploadBlobResponse
+ */
+export const UploadBlobResponse = new UploadBlobResponse$Type();
 /**
  * @generated ServiceType for protobuf service polycentric.v2.ContentService
  */
 export const ContentService = new ServiceType("polycentric.v2.ContentService", [
-    { name: "SyncContent", options: {}, I: SyncContentRequest, O: SyncContentResponse }
+    { name: "SyncContent", options: {}, I: SyncContentRequest, O: SyncContentResponse },
+    { name: "UploadBlob", options: {}, I: UploadBlobRequest, O: UploadBlobResponse }
 ]);

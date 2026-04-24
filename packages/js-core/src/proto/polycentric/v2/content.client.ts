@@ -4,6 +4,8 @@
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { ContentService } from "./content";
+import type { UploadBlobResponse } from "./content";
+import type { UploadBlobRequest } from "./content";
 import { stackIntercept } from "@protobuf-ts/runtime-rpc";
 import type { SyncContentResponse } from "./content";
 import type { SyncContentRequest } from "./content";
@@ -19,6 +21,12 @@ export interface IContentServiceClient {
      * @generated from protobuf rpc: SyncContent
      */
     syncContent(input: SyncContentRequest, options?: RpcOptions): UnaryCall<SyncContentRequest, SyncContentResponse>;
+    /**
+     * Uploads a blob. If the blob is not referenced in a time window, it will be deleted.
+     *
+     * @generated from protobuf rpc: UploadBlob
+     */
+    uploadBlob(input: UploadBlobRequest, options?: RpcOptions): UnaryCall<UploadBlobRequest, UploadBlobResponse>;
 }
 /**
  * @generated from protobuf service polycentric.v2.ContentService
@@ -37,5 +45,14 @@ export class ContentServiceClient implements IContentServiceClient, ServiceInfo 
     syncContent(input: SyncContentRequest, options?: RpcOptions): UnaryCall<SyncContentRequest, SyncContentResponse> {
         const method = this.methods[0], opt = this._transport.mergeOptions(options);
         return stackIntercept<SyncContentRequest, SyncContentResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Uploads a blob. If the blob is not referenced in a time window, it will be deleted.
+     *
+     * @generated from protobuf rpc: UploadBlob
+     */
+    uploadBlob(input: UploadBlobRequest, options?: RpcOptions): UnaryCall<UploadBlobRequest, UploadBlobResponse> {
+        const method = this.methods[1], opt = this._transport.mergeOptions(options);
+        return stackIntercept<UploadBlobRequest, UploadBlobResponse>("unary", this._transport, method, opt, input);
     }
 }
