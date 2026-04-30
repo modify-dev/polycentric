@@ -5,13 +5,15 @@
       when: always
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
-        - packages/react-native/**/*
+        - packages/**/*
+        - apps/**/*
         - .gitlab/ci/build_rn_sdk.yml
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
-        - packages/react-native/**/*
+        - packages/**/*
+        - apps/**/*
         - .gitlab/ci/build_rn_sdk.yml
 
 .rn-sdk-base:
@@ -58,7 +60,3 @@ rn-sdk-build:
       - packages/react-native/android/libs
       - packages/react-native/ios/libs
     expire_in: 1 week
-  rules:
-    - !reference [.rn-sdk-workflow, rules]
-    - !reference [.rs-sdk-workflow, rules]
-    - !reference [.app-workflow, rules]
