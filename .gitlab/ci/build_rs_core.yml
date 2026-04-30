@@ -43,8 +43,6 @@
 
 .build-images:
   extends: .rs-sdk-workflow
-  tags:
-    - dind
   services:
     - name: gitlab.futo.org:5050/devops/manifest-repo/library/docker:dind
       command: ['dockerd', '--host=tcp://0.0.0.0:2375', '--tls=false']
@@ -149,6 +147,9 @@ rs-sdk-build-ios-device:
   artifacts:
     paths:
       - buildRsCoreIOSDevice/binary/*.a
+  rules:
+    - !reference [.rs-sdk-workflow, rules]
+    - !reference [.app-workflow, rules]
 
 rs-sdk-build-ios-sim-arm64:
   stage: build
