@@ -5,15 +5,15 @@
       when: always
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
-        - packages/rs-core/**/*
-        - packages/rs-common/**/*A
+        - packages/**/*
+        - apps/**/*
         - .gitlab/ci/build_rs_core.yml
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
-        - packages/rs-core/**/*
-        - packages/rs-common/**/*
+        - packages/**/*
+        - apps/**/*
         - .gitlab/ci/build_rs_core.yml
   variables:
     RUNNER_SCRIPT_TIMEOUT: 179m
@@ -98,9 +98,6 @@ build-android-image:
   extends: .rs-sdk-workflow
   image: ${ANDROID_IMAGE}
   stage: build
-  rules:
-    - !reference [.rs-sdk-workflow, rules]
-    - !reference [.app-workflow, rules]
 
 rs-sdk-format-check:
   extends: .rust-check
@@ -114,10 +111,6 @@ rs-sdk-clippy:
 
 rs-sdk-build-wasm-browser:
   extends: .rs-sdk-build-wasm
-  rules:
-    - !reference [.rs-sdk-workflow, rules]
-    - !reference [.js-sdk-workflow, rules]
-    - !reference [.app-workflow, rules]
   script:
     - just build-wasm-web
   artifacts:
