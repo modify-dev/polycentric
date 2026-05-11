@@ -13,20 +13,8 @@ export function fromBase64(base64: string): Uint8Array {
   return bytes;
 }
 
-/**
- * BigInt-free mirror of `v2.EventKey`. The proto's `sequence` is a `bigint`,
- * which crashes React Native's render logger when any component receives it
- * as a prop — so we carry the sequence as a decimal string through the
- * UI/state layer and only convert back to `bigint` when talking to the core.
- */
-export interface EventKeyRef {
-  collection?: number;
-  identity: string;
-  signedBy?: v2.PublicKey;
-  sequence: string;
-}
-
 export type PostData = {
+  /** Hex of the event key */
   id: string;
 
   identity: v2.EventKey['identity'];
@@ -41,41 +29,26 @@ export type PostData = {
 
   /** Set when the underlying `v2.Post` carried a `reply`. */
   reply?: {
-    root?: EventKeyRef;
-    parent?: EventKeyRef;
+    /** Hex of the root post's EventKey — same encoding as `PostData.id`. */
+    rootId?: string;
+    /** Hex of the parent post's EventKey — same encoding as `PostData.id`. */
+    parentId?: string;
   };
 
   signedEvent: v2.SignedEvent;
 };
 
-function eventKeyToRef(key: v2.EventKey | undefined): EventKeyRef | undefined {
-  if (!key) return undefined;
-  return {
-    collection: key.collection,
-    identity: key.identity,
-    signedBy: key.signedBy,
-    sequence: key.sequence.toString(),
-  };
-}
-
-/** Canonical event key: author:process:logicalClock */
-export function eventKey(
-  authorKey: Uint8Array,
-  process: Uint8Array,
-  logicalClock: number,
-): string {
-  return `${bytesToHex(authorKey)}:${bytesToHex(process)}:${logicalClock}`;
-}
-
-/** Extract the sequence number (logicalClock) from an internal eventKey postId. */
-export function postIdToSequence(postId: string): string | null {
-  const parts = postId.split(':');
-  if (parts.length !== 3) return null;
-  return parts[2];
+// A key fingerprint is the first 16 characters of the hex bytes of the key contents
+// It does not include the key type.
+export function getKeyFingerprint(key?: v2.PublicKey): string | undefined {
+  if (!key) {
+    return undefined;
+  }
+  return bytesToHex(key.key).substring(0, 16);
 }
 
 /** Decode a v2 EventBundle into PostData, or null if not a post. */
-export function decodeV2PostBundle(bundle: v2.EventBundle): PostData | null {
+export function decodePostBundle(bundle: v2.EventBundle): PostData | null {
   try {
     if (!bundle.signedEvent) return null;
     const event = v2.Event.fromBinary(bundle.signedEvent.eventBytes);
@@ -88,15 +61,17 @@ export function decodeV2PostBundle(bundle: v2.EventBundle): PostData | null {
     );
     if (content.contentBody.oneofKind !== 'post') return null;
 
-    const authorKey = key.signedBy.key;
-    const identityBytes = new TextEncoder().encode(key.identity);
-    const id = eventKey(authorKey, identityBytes, Number(key.sequence));
+    const id = bytesToHex(v2.EventKey.toBinary(key));
 
     const post = content.contentBody.post;
     const reply = post.reply
       ? {
-          root: eventKeyToRef(post.reply.root),
-          parent: eventKeyToRef(post.reply.parent),
+          rootId: post.reply.root
+            ? bytesToHex(v2.EventKey.toBinary(post.reply.root))
+            : undefined,
+          parentId: post.reply.parent
+            ? bytesToHex(v2.EventKey.toBinary(post.reply.parent))
+            : undefined,
         }
       : undefined;
 
@@ -114,7 +89,8 @@ export function decodeV2PostBundle(bundle: v2.EventBundle): PostData | null {
         signature: bundle.signedEvent.signature,
       }),
     };
-  } catch {
+  } catch (e) {
+    console.warn('[decodePostBundle] drop: decode threw', e);
     return null;
   }
 }

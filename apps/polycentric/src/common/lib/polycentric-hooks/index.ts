@@ -23,17 +23,18 @@ export {
   type ProfileEditState,
 } from '../../../features/profile/hooks/useProfileEdit';
 
+// Local post injection (composer → live feeds)
+export { useLocalPosts as useLocalPostInjection } from '../../../features/post/hooks/useLocalPosts';
+
 // Helpers
 export {
-  decodeV2PostBundle,
+  decodePostBundle as decodeV2PostBundle,
   pubkeyStr,
   identiconUrl,
   pickImageVariant,
   timeAgo,
   bytesToHex,
   hexToBytes,
-  eventKey,
-  postIdToSequence,
   truncateName,
   publicKeyToString,
   stringToPublicKey,
@@ -47,4 +48,4 @@ export {
   toBase64,
   fromBase64,
 } from './helpers';
-export type { EventKeyRef, PostData } from './helpers';
+export type { PostData } from './helpers';

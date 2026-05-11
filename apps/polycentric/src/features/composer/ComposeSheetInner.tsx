@@ -6,6 +6,7 @@ import {
   TextArea,
 } from '@/src/common/components/primitives';
 import {
+  hexToBytes,
   truncateName,
   useCurrentIdentity,
   usePolycentric,
@@ -54,7 +55,7 @@ export function ComposeSheetInner({
   const client = usePolycentric();
   const { identityKey: currentIdentityKey, identity: currentIdentity } =
     useCurrentIdentity();
-  const username = useUsername(currentIdentityKey);
+
   const { theme } = useTheme();
 
   const onPostCreatedRef = useRef(onPostCreated);
@@ -66,6 +67,12 @@ export function ComposeSheetInner({
     signedBy: replyTo?.signedBy,
     sequence: BigInt(replyTo?.sequence ?? 0),
   });
+
+  // If replyTo is itself a reply, inherit its root.
+  // Otherwise, replyTo *is* the root.
+  const replyRootEventKey = replyTo?.reply?.rootId
+    ? v2.EventKey.fromBinary(hexToBytes(replyTo.reply.rootId))
+    : replyToEventKey;
 
   const replyAuthorName = useUsername(replyTo?.identity ?? null);
   const replyContent = replyTo?.content ?? '';
@@ -156,7 +163,7 @@ export function ComposeSheetInner({
 
       if (isReply) {
         post.reply = {
-          root: replyToEventKey,
+          root: replyRootEventKey,
           parent: replyToEventKey,
         };
       }
@@ -171,7 +178,7 @@ export function ComposeSheetInner({
       const event = await client.buildEvent(content);
 
       const signedEvent = await client.signEvent(event);
-
+      console.log(signedEvent);
       // `commitEvent` persists the event locally and, when content is
       // passed, seeds the core's content store + emits contentCreated
       // with both signedEvent and content so feeds can decode directly.
@@ -185,6 +192,7 @@ export function ComposeSheetInner({
       // TODO
       // await onPostCreatedRef.current(signedEvent);
     } catch (err) {
+      console.error(err);
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
     } finally {
@@ -198,6 +206,7 @@ export function ComposeSheetInner({
     dismissSheet,
     isReply,
     replyToEventKey,
+    replyRootEventKey,
     resetComposer,
     setSubmitting,
     setError,
