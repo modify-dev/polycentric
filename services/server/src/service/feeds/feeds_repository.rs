@@ -1,14 +1,18 @@
+use ::entity::content_delete_model as ContentDeleteModel;
 use ::entity::content_follow_model as ContentFollowModel;
 use ::entity::content_model as ContentModel;
 use ::entity::event_model as EventModel;
+use polycentric_common::models::collections;
 use sea_orm::FromQueryResult;
 use sea_orm::sea_query::{Expr, IntoCondition};
 use sea_orm::*;
 
-// Collection numbers shared with the client (see js-core/src/constants.ts).
-const FEED_COLLECTION: i16 = 2;
-const PROFILE_COLLECTION: i16 = 3;
-const GRAPH_COLLECTION: i16 = 5;
+// Local i16 aliases for the shared protocol collection IDs — sea-orm
+// queries against `EventModel::Column::Collection` use i16 while the
+// canonical constants in rs-common are i32.
+const FEED_COLLECTION: i16 = collections::FEED as i16;
+const PROFILE_COLLECTION: i16 = collections::PROFILE as i16;
+const GRAPH_COLLECTION: i16 = collections::SOCIAL_GRAPH as i16;
 
 pub struct Query;
 
@@ -31,17 +35,14 @@ impl Query {
     }
 
     /// Return the list of identities that `caller` has followed (as
-    /// recorded by Follow events in the GRAPH collection).
-    ///
-    /// Unfollow (Delete) tombstones are not yet applied server-side, so a
-    /// previously-unfollowed identity still appears here.
+    /// recorded by Follow events in the GRAPH collection), excluding any
+    /// Follow event whose EventKey has been tombstoned by a Delete event.
+    /// Follow → Unfollow → Follow-again resolves to "following" because the
+    /// re-follow event has a fresh sequence and no Delete points at it.
     pub async fn list_followed_identities(
         db: &DbConn,
         caller: &str,
     ) -> Result<Vec<String>, DbErr> {
-        // Deduplicate because the same Follow content (by digest) may be
-        // referenced by multiple events — e.g. follow → unfollow → follow
-        // again all share one content row but produce distinct events.
         let rows = EventModel::Entity::find()
             .select_only()
             .column(ContentFollowModel::Column::IdentityId)
@@ -54,8 +55,11 @@ impl Query {
                     .to(ContentFollowModel::Column::ContentId)
                     .into(),
             )
+            .join(JoinType::LeftJoin, delete_tombstone_join())
             .filter(EventModel::Column::Collection.eq(GRAPH_COLLECTION))
             .filter(EventModel::Column::Identity.eq(caller))
+            // ie. keep events where there is no deleted event (tombstone)
+            .filter(ContentDeleteModel::Column::ContentId.is_null())
             .into_tuple::<String>()
             .all(db)
             .await?;
@@ -265,7 +269,7 @@ impl Query {
 }
 
 /// Relation joining an event to its content row on (digest_type, digest_bytes).
-fn content_join() -> RelationDef {
+pub(crate) fn content_join() -> RelationDef {
     EventModel::Entity::belongs_to(ContentModel::Entity)
         .from(EventModel::Column::ContentDigestType)
         .to(ContentModel::Column::DigestType)
@@ -273,6 +277,56 @@ fn content_join() -> RelationDef {
             Expr::col((event_tbl, EventModel::Column::ContentDigestBytes))
                 .equals((content_tbl, ContentModel::Column::DigestBytes))
                 .into_condition()
+        })
+        .into()
+}
+
+/// Relation joining an event to any `content_delete` row whose stored
+/// EventKey matches this event. Use as a LEFT JOIN so that a NULL partner
+/// means "not tombstoned".
+fn delete_tombstone_join() -> RelationDef {
+    EventModel::Entity::belongs_to(ContentDeleteModel::Entity)
+        .from(EventModel::Column::Collection)
+        .to(ContentDeleteModel::Column::EventKeyCollection)
+        .on_condition(|event_tbl, delete_tbl| {
+            Condition::all()
+                .add(
+                    Expr::col((
+                        event_tbl.clone(),
+                        EventModel::Column::Identity,
+                    ))
+                    .equals((
+                        delete_tbl.clone(),
+                        ContentDeleteModel::Column::EventKeyIdentity,
+                    )),
+                )
+                .add(
+                    Expr::col((
+                        event_tbl.clone(),
+                        EventModel::Column::PublicKeyType,
+                    ))
+                    .equals((
+                        delete_tbl.clone(),
+                        ContentDeleteModel::Column::EventKeyPublicKeyType,
+                    )),
+                )
+                .add(
+                    Expr::col((
+                        event_tbl.clone(),
+                        EventModel::Column::PublicKey,
+                    ))
+                    .equals((
+                        delete_tbl.clone(),
+                        ContentDeleteModel::Column::EventKeyPublicKey,
+                    )),
+                )
+                .add(
+                    Expr::col((event_tbl, EventModel::Column::Sequence))
+                        .equals((
+                            delete_tbl,
+                            ContentDeleteModel::Column::EventKeySequence,
+                        )),
+                )
         })
         .into()
 }
