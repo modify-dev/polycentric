@@ -20,13 +20,13 @@ COPY packages packages
 COPY services services
 COPY tools tools
 RUN cargo build --release \
-    --package server \
-    --package migration
+    --package push-notifications-service \
+    --package push-notifications-migration
 
 FROM rust:1.96-slim
 WORKDIR /app
 COPY services/common/runtime-deps.sh runtime-deps.sh
 RUN sh runtime-deps.sh
-COPY --from=builder /app/target/release/server /app/server
-COPY --from=builder /app/target/release/migration /app/migration
-CMD ["/app/server"]
+COPY --from=builder /app/target/release/push-notifications-service /app/push-notifications-service
+COPY --from=builder /app/target/release/push-notifications-migration /app/push-notifications-migration
+CMD ["/app/push-notifications-service"]
