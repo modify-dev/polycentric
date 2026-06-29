@@ -8,12 +8,15 @@ import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { ClaimField, useClaimById } from '../hooks/useClaimById';
+import { ClaimMenu } from './ClaimMenu';
 import { RequestVerificationSheet } from '../RequestVerificationSheet';
 import { resolveClaimTitle } from '../utils/render';
 import { Toolbar } from './toolbar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ViewClaimScreen() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     identityId,
     keyFingerprint,
@@ -47,9 +50,17 @@ export default function ViewClaimScreen() {
     <Screen>
       <Screen.PrimaryColumn>
         <ScrollView
-          HeaderComponent={<Topbar title="Claim" />}
+          HeaderComponent={
+            <Topbar
+              title="Claim"
+              right={claim ? <ClaimMenu claim={claim} /> : undefined}
+            />
+          }
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[Atoms.flex_1]}
+          contentContainerStyle={[
+            Atoms.flex_1,
+            { paddingBottom: insets.bottom },
+          ]}
         >
           <View style={[Atoms.p_lg, Atoms.gap_lg, Atoms.flex_1]}>
             {isLoading && !claim && (

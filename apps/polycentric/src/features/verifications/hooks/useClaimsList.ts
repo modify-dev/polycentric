@@ -9,11 +9,12 @@ import { DecodedClaim, decodeClaimBundle } from './useClaimById';
 export function useClaimsList(identity: string | undefined): {
   claims: DecodedClaim[];
   isLoading: boolean;
+  refresh: () => void;
 } {
   const enabled = !!identity;
 
   const query = useQuery(
-    ['list-events', String(COLLECTION.VERIFICATIONS), identity ?? ''],
+    ['claims-list', String(COLLECTION.VERIFICATIONS), identity ?? ''],
     new Query.ListEvents({
       identity: identity ?? '',
       collection: COLLECTION.VERIFICATIONS,
@@ -38,5 +39,5 @@ export function useClaimsList(identity: string | undefined): {
     }
   }, [enabled, query.data]);
 
-  return { claims, isLoading: query.isLoading };
+  return { claims, isLoading: query.isLoading, refresh: query.refresh };
 }
