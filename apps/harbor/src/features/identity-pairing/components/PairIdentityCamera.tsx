@@ -4,22 +4,23 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import {
   Camera,
-  isScannedCode,
   useCameraDevice,
   useCameraPermission,
-  useObjectOutput,
 } from 'react-native-vision-camera';
+import {
+  type TargetBarcodeFormat,
+  useBarcodeScannerOutput,
+} from 'react-native-vision-camera-barcode-scanner';
+import type { PairIdentityCameraComponent } from './PairIdentityCamera.types';
 import { PairIdentityManualEntry } from './PairIdentityManualEntry';
 
-export interface PairIdentityCameraProps {
-  onCodeScanned: (code: string, server: string | null) => void;
-  parseInput: (text: string) => { server: string | null; code: string };
-}
+// Stable reference for the barcode formats array to prevent
+// the scanner from being destroyed and recreated extra times.
+const BARCODE_FORMATS: TargetBarcodeFormat[] = ['qr-code'];
 
-export function PairIdentityCamera({
+export const PairIdentityCamera: PairIdentityCameraComponent = ({
   onCodeScanned,
-  parseInput,
-}: PairIdentityCameraProps) {
+}) => {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const [cameraEnabled, setCameraEnabled] = useState(true);
@@ -27,17 +28,18 @@ export function PairIdentityCamera({
   const { theme } = useTheme();
   const scannedRef = useRef(false);
 
-  const objectOutput = useObjectOutput({
-    types: ['qr'],
-    onObjectsScanned: (objects) => {
+  const barcodeOutput = useBarcodeScannerOutput({
+    barcodeFormats: BARCODE_FORMATS,
+    onBarcodeScanned: (barcodes) => {
       if (scannedRef.current) return;
-      const qrCode = objects.find(isScannedCode);
-      if (qrCode?.value) {
-        scannedRef.current = true;
-        const { code, server } = parseInput(qrCode.value);
-        onCodeScanned(code, server);
-      }
+
+      const value = barcodes.find((barcode) => barcode.rawValue)?.rawValue;
+      if (!value) return;
+
+      scannedRef.current = true;
+      onCodeScanned(value);
     },
+    onError: () => setCameraEnabled(false),
   });
 
   useEffect(() => {
@@ -47,9 +49,9 @@ export function PairIdentityCamera({
   }, [hasPermission, requestPermission, cameraEnabled]);
 
   const handleContinue = () => {
-    if (!input.trim()) return;
-    const { code, server } = parseInput(input);
-    onCodeScanned(code, server);
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    onCodeScanned(trimmed);
   };
 
   const canUseCamera = hasPermission && cameraEnabled && device !== undefined;
@@ -74,7 +76,7 @@ export function PairIdentityCamera({
             <Camera
               device={device}
               isActive={true}
-              outputs={[objectOutput]}
+              outputs={[barcodeOutput]}
               style={{ flex: 1 }}
             />
           </View>
@@ -108,4 +110,4 @@ export function PairIdentityCamera({
       )}
     </>
   );
-}
+};

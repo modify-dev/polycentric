@@ -2,12 +2,8 @@ import { LinkButton, Text } from '@/src/common/components';
 import { Atoms, useTheme } from '@/src/common/theme';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
+import type { PairIdentityCameraComponent } from './PairIdentityCamera.types';
 import { PairIdentityManualEntry } from './PairIdentityManualEntry';
-
-export interface PairIdentityCameraProps {
-  onCodeScanned: (code: string, server: string | null) => void;
-  parseInput: (text: string) => { server: string | null; code: string };
-}
 
 function supportsGetUserMedia() {
   return (
@@ -16,10 +12,9 @@ function supportsGetUserMedia() {
   );
 }
 
-export function PairIdentityCamera({
+export const PairIdentityCamera: PairIdentityCameraComponent = ({
   onCodeScanned,
-  parseInput,
-}: PairIdentityCameraProps) {
+}) => {
   const [input, setInput] = useState('');
   const [useCamera, setUseCamera] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -70,8 +65,7 @@ export function PairIdentityCamera({
             const raw = barcodes[0]?.rawValue;
             if (raw) {
               scannedRef.current = true;
-              const { code, server } = parseInput(raw);
-              onCodeScanned(code, server);
+              onCodeScanned(raw);
               return;
             }
           } catch {}
@@ -100,12 +94,12 @@ export function PairIdentityCamera({
         track.stop();
       });
     };
-  }, [canUseCamera, onCodeScanned, parseInput]);
+  }, [canUseCamera, onCodeScanned]);
 
   const handleContinue = () => {
-    if (!input.trim()) return;
-    const { code, server } = parseInput(input);
-    onCodeScanned(code, server);
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    onCodeScanned(trimmed);
   };
 
   return (
@@ -166,4 +160,4 @@ export function PairIdentityCamera({
       )}
     </>
   );
-}
+};
