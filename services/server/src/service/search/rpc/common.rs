@@ -2,10 +2,12 @@ use crate::data::hydration::HydrationState;
 use crate::service::context::ServiceContext;
 use crate::service::events::TargetEventKey;
 use crate::service::events::tombstone;
-use crate::service::feeds::repository::EventWithContentRow;
-use crate::service::feeds::rpc::common::to_target_event_keys;
+use crate::service::feeds::repository::{self, EventWithContentRow};
 use crate::service::feeds::rpc::common::{
     Referenced, has_matching_label, referenced_target2,
+};
+use crate::service::feeds::rpc::common::{
+    to_target_event_key, to_target_event_keys,
 };
 use crate::service::feeds::util::PageCursor;
 use crate::service::identity::service::{bundles_to_hints, rows_to_bundles};
@@ -18,7 +20,7 @@ use crate::service::proto::{
     self, Content, EventBundle, EventHint, EventKey, PageParams, SearchResult,
 };
 use crate::service::stats::service::{
-    EventStats, assemble_bundles, include_stats,
+    EventStats, assemble_bundles, gather_stats_for, include_stats,
 };
 use entity::{content_model, event_model};
 use polycentric_common::models::protos_v2::content::ContentBody;
@@ -45,6 +47,8 @@ impl<SortedBy> Params<SortedBy> {
     where
         Cursor<SortedBy>: PageCursor,
     {
+        let query = prepare_search_query(&query)
+            .ok_or_else(|| Status::invalid_argument("empty search query"))?;
         let limit = page_limit(params);
 
         let tokens = params
@@ -71,6 +75,92 @@ impl<SortedBy> Params<SortedBy> {
             limit,
             cursor_filter,
         })
+    }
+}
+
+/// Construct a search query from a user defined `query` to use in
+/// `search_query`.
+fn prepare_search_query(search_query: &str) -> Option<String> {
+    let search_query = search_query.trim();
+    if search_query.is_empty() {
+        return None;
+    }
+
+    // There is propably a more performant way we can do these query
+    // transformations. But in most cases the query will be quite short, so it's
+    // not really worth spending too much time on.
+    // It's left as an "exercise to reader". ;)
+    let mut result = String::with_capacity(search_query.len() * 2);
+    let mut in_quote = false;
+    for c in search_query.chars() {
+        match c {
+            '\"' => {
+                in_quote = !in_quote;
+                result.push(c);
+            }
+            c if c.is_whitespace()
+                // Characters to escape, we convert them into whitespace.
+                || matches!(c, ':' | '&' | '|' | '!' | '<' | '>' | '(' | ')') =>
+            {
+                // Ignore whitespace or to-be-escaped characters at the start.
+                if result.is_empty() {
+                    continue;
+                }
+
+                if in_quote {
+                    // Words connected with `+` (followed by an operator) get the prefix
+                    // matching (`:*`) applied to allow connected works, e.g.
+                    // `New+York:*` becomes `'new':* <-> 'york':*`.
+                    if !result.ends_with('+') {
+                        result.push('+');
+                    }
+                } else {
+                    // `:*` is for prefix matching of the word. `&` for "and" matching,
+                    // i.e. match both search terms.
+                    if !result.ends_with(":*&") {
+                        result.push_str(":*&");
+                    }
+                }
+            }
+            c => result.push(c),
+        }
+    }
+    // Remove last +/& as we don't need to join any more words.
+    if result.ends_with('+') || result.ends_with('&') {
+        result.pop();
+    }
+    if !result.ends_with(":*") && !result.is_empty() {
+        result.push_str(":*");
+    }
+    Some(result)
+}
+
+#[test]
+fn test_prepare_search_query() {
+    let tests = [
+        ("York", Some("York:*")),
+        ("New York", Some("New:*&York:*")),
+        ("\"New York\"", Some("\"New+York\":*")),
+        ("\"New\" York", Some("\"New\":*&York:*")),
+        ("New \"York\"", Some("New:*&\"York\":*")),
+        ("\"New York", Some("\"New+York:*")),
+        ("New York\"", Some("New:*&York\":*")),
+        ("author:Sparrow", Some("author:*&Sparrow:*")),
+        ("creator::Sparrow", Some("creator:*&Sparrow:*")),
+        (
+            "initialize_solana_accounts()",
+            Some("initialize_solana_accounts:*"),
+        ),
+        ("openV<", Some("openV:*")),
+        ("", None),
+        (" ", None),
+        ("  ", None),
+        ("\t", None),
+    ];
+
+    for (input, expected) in tests {
+        let got = prepare_search_query(input);
+        assert_eq!(got.as_deref(), expected, "input: {input}");
     }
 }
 
@@ -173,13 +263,24 @@ where
     }
 }
 
-pub fn collect_referenced_keys(rows: &[SearchRow]) -> Vec<EventKey> {
+/// Returns all event keys references in `rows` as well as a set for the quoutes
+/// and reports.
+pub fn collect_referenced_keys(
+    rows: &[SearchRow],
+) -> (
+    Vec<EventKey>,
+    HashSet<TargetEventKey>,
+    HashSet<TargetEventKey>,
+) {
     let mut keys = Vec::with_capacity(rows.len());
     let mut push_key = |maybe_key: Option<EventKey>| {
         if let Some(key) = maybe_key {
             keys.push(key);
         }
     };
+
+    let mut quote_set = HashSet::new();
+    let mut repost_set = HashSet::new();
     for (_, content, _) in rows {
         let Ok(decoded) = Content::decode(content.serialized_bytes.as_slice())
         else {
@@ -187,6 +288,11 @@ pub fn collect_referenced_keys(rows: &[SearchRow]) -> Vec<EventKey> {
         };
         match decoded.content_body {
             Some(ContentBody::Post(post)) => {
+                if let Some(key) = post.quote.as_ref()
+                    && let Some(key) = to_target_event_key(key)
+                {
+                    quote_set.insert(key);
+                }
                 push_key(post.quote);
             }
             Some(ContentBody::Delete(delete)) => {
@@ -196,6 +302,11 @@ pub fn collect_referenced_keys(rows: &[SearchRow]) -> Vec<EventKey> {
                 push_key(reaction.event_key);
             }
             Some(ContentBody::Repost(repost)) => {
+                if let Some(key) = repost.post.as_ref()
+                    && let Some(key) = to_target_event_key(key)
+                {
+                    repost_set.insert(key);
+                }
                 push_key(repost.post);
             }
             Some(ContentBody::Report(report)) => {
@@ -219,7 +330,7 @@ pub fn collect_referenced_keys(rows: &[SearchRow]) -> Vec<EventKey> {
             | None => {}
         }
     }
-    keys
+    (keys, quote_set, repost_set)
 }
 
 pub struct SearchResponseFilter<SortedBy> {
@@ -241,7 +352,7 @@ pub async fn hydrate<SortedBy>(
         rows.iter()
             .map(|(event, content, _)| (event, Some(content))),
     );
-    let ref_keys = collect_referenced_keys(rows);
+    let (ref_keys, quote_set, repost_set) = collect_referenced_keys(rows);
     let mut target_event_keys = to_target_event_keys(&ref_keys);
 
     // Event keys for all referenced post events that may be displayed by the client.
@@ -254,22 +365,71 @@ pub async fn hydrate<SortedBy>(
     let tombstones_fut = tombstone::validated_tombstones(ctx, &display_keys);
     let identity_events_fut = list_identity_events(ctx, identities.clone());
     let profile_events_fut = list_profile_events(ctx, identities);
+    let referenced_fut = async {
+        repository::Query::list_events_by_keys(&ctx.db, &ref_keys)
+            .await
+            .map_err(|err| {
+                log::warn!("failed to list events: {err}");
+                Status::internal("internal server error")
+            })
+    };
+    let labels_fut = async {
+        repository::Query::list_labels_for_event_keys(
+            &ctx.db,
+            &display_keys,
+            ctx.trusted_moderator.as_deref(),
+        )
+        .await
+        .map_err(|err| {
+            log::warn!("failed to list labels: {err}");
+            Status::internal("internal server error")
+        })
+    };
 
-    let (deletes_by_target, identity_events, profile_events) = tokio::try_join!(
+    let stats_fut = async {
+        gather_stats_for(&ctx.db, &display_keys)
+            .await
+            .map_err(|err| {
+                log::warn!("failed to gather stats: {err}");
+                Status::internal("internal server error")
+            })
+    };
+
+    let (
+        deletes_by_target,
+        identity_events,
+        profile_events,
+        referenced,
+        label_events,
+        stats,
+    ) = tokio::try_join!(
         tombstones_fut,
         identity_events_fut,
         profile_events_fut,
+        referenced_fut,
+        labels_fut,
+        stats_fut,
     )?;
+
+    let mut quote_post_events = Vec::new();
+    let mut repost_events = Vec::new();
+    for row in referenced {
+        let key = TargetEventKey::of(&row.0);
+        if quote_set.contains(&key) {
+            quote_post_events.push(row);
+        } else if repost_set.contains(&key) {
+            repost_events.push(row);
+        }
+    }
 
     Ok(HydrationState {
         deletes_by_target,
         identity_events,
         profile_events,
-        // Unused in searching of users.
-        quote_post_events: Vec::new(),
-        repost_events: Vec::new(),
-        label_events: Vec::new(),
-        stats: EventStats::none(),
+        quote_post_events,
+        repost_events,
+        label_events,
+        stats,
     })
 }
 
