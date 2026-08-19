@@ -6,6 +6,7 @@ import { PagerView } from '@/src/common/components/PagerView';
 import { openCompose } from '@/src/common/constants';
 import { useEagerLoad } from '@/src/common/lib/navigation/useEagerLoad';
 import { useFocusedRefresh } from '@/src/common/lib/navigation/useFocusedRefresh';
+import { usePageTitle } from '@/src/common/lib/navigation/usePageTitle';
 import { isIOS, isWeb } from '@/src/common/util/platform';
 import { ComposerInput } from '@/src/features/composer';
 import type { SharedValue } from 'react-native-reanimated';
@@ -24,9 +25,19 @@ type PageProps = {
   controlRef: FeedPageControlRef;
 };
 
+// Web tops each page with the composer, so it scrolls under the pinned tabs.
+const PageHeader = isWeb ? ComposerInput : undefined;
+
 function ForYouPage({ active, ready, controlRef }: PageProps) {
   const feed = useRecommendedFeed({ enabled: ready && active });
-  return <FeedPage feed={feed} active={active} controlRef={controlRef} />;
+  return (
+    <FeedPage
+      feed={feed}
+      active={active}
+      controlRef={controlRef}
+      ListHeaderComponent={PageHeader}
+    />
+  );
 }
 
 function FollowingPage({
@@ -36,12 +47,21 @@ function FollowingPage({
   controlRef,
 }: PageProps & { sort: FeedSortOption }) {
   const feed = useFollowingFeed({ sort, enabled: ready && active });
-  return <FeedPage feed={feed} active={active} controlRef={controlRef} />;
+  return (
+    <FeedPage
+      feed={feed}
+      active={active}
+      controlRef={controlRef}
+      ListHeaderComponent={PageHeader}
+    />
+  );
 }
 
 export default function FeedScreen() {
   // iOS uses the detached native compose tab item (see app/(tabs)/_layout.tsx);
   const showComposeFab = !isWeb && !isIOS;
+
+  usePageTitle('Home');
 
   const ready = useEagerLoad();
   const { tab, hydrated, control, onTabPress, refreshActive } =
@@ -63,7 +83,6 @@ export default function FeedScreen() {
         onPress={onTabPress}
         progress={dragProgress}
       />
-      {isWeb && <ComposerInput />}
     </>
   );
 
