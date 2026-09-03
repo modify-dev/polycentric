@@ -55,9 +55,7 @@ pub async fn delete_events(args: Vec<String>) {
     .expect("failed to delete events");
     println!(
         "deleted {} events, {} orphaned content rows and {} blobs",
-        erased.events,
-        erased.content,
-        erased.blobs.len()
+        erased.events, erased.content, erased.blobs
     );
 }
 
@@ -70,10 +68,9 @@ pub async fn prune_content(args: Vec<String>) {
 
     let db = connect().await;
     if !yes {
-        let count = Query::orphan_content_ids(&db)
+        let count = Query::count_orphan_content(&db)
             .await
-            .expect("failed to find orphaned content")
-            .len();
+            .expect("failed to count orphaned content");
         println!(
             "{count} content rows would be deleted; add --yes to delete them"
         );
@@ -86,8 +83,7 @@ pub async fn prune_content(args: Vec<String>) {
         .expect("failed to prune content");
     println!(
         "deleted {} orphaned content rows and {} blobs",
-        pruned.content,
-        pruned.blobs.len()
+        pruned.content, pruned.blobs
     );
 }
 
