@@ -11,7 +11,7 @@ are still used.
 |---|---|---|
 | `pr.yml` | pull requests | checks, builds, tests |
 | `pr-app.yml` | `build-app` label on a PR | staging EAS builds |
-| `cd-staging.yml` | push to `develop`, manual run, nightly | the above plus staging deploys |
+| `cd-staging.yml` | push to `develop`, manual run | the above plus staging deploys |
 | `release.yml` | `v*` and `app-*` tags | the above plus the release |
 | `cd-production.yml` | manual | promote chosen components to `production`, production app builds |
 | `cd-docs-cleanup.yml` | PR closed | remove the docs preview |
@@ -93,6 +93,10 @@ Runners are ephemeral, so `actions/cache` is useless. `r2-cache` keeps
 tarballs in the R2 bucket: each Rust job's cargo registry and `target/`
 (keyed by rustc version and Cargo files), plus Gradle. sccache covers the
 crates that still compile.
+
+Image builds read the registry cache `<image>:cache-develop`. Only default
+branch runs write it, with `mode=max` so a build resumes from the step that
+changed; a PR reads it and exports nothing.
 
 ## Forgejo notes
 
